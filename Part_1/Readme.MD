@@ -1,3 +1,4 @@
+
 ![Alt text](image.png)
 
 Udemy Course >> How Install Config Zabbix 6 Network Cloud Monitoring Part 1
@@ -17,6 +18,8 @@ Instructor & Courses:
 https://www.udemy.com/user/adrian-fischer-infotech/
 
 **********
+
+![Alt text](image-1.png)
 
 Lab Requirements:
 
