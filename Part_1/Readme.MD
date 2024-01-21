@@ -44,8 +44,6 @@ Option 2 - PC Virtualization Options - Installation/Download URL Links (Windows/
 Swap Configuration on Ubuntu 20 or 22 - Linux Command >>
 ```bash
 sudo apt update -y && sudo apt upgrade -y
-sudo lsb_release -a
-sudo apt install screen -y
 sudo fallocate -l 4G /swapfile
 ls -anp /swapfile
 sudo chmod 600 /swapfile
