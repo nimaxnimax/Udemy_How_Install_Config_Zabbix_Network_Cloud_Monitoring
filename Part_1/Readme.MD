@@ -11,7 +11,7 @@ Complete Crash Course >> Server Network Administration Cloud Monitoring for Free
 
 Tips/Tricks/Notes/Commands URL Link:
 
-
+https://github.com/nimaxnimax/Udemy_How_Install_Config_Zabbix_Network_Cloud_Monitoring/tree/main/Part_1
 
 Instructor & Courses:
 
@@ -36,10 +36,6 @@ Option 2 - PC Virtualization Options - Installation/Download URL Links (Windows/
 - Ubuntu Download Link >> https://releases.ubuntu.com/jammy/
 
 **********
-
-
-**********
-
 
 **********
 
