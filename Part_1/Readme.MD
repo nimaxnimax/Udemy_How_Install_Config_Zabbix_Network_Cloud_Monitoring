@@ -118,11 +118,172 @@ Note: The default port numbers mentioned above are based on standard installatio
 
 How to Install Zabbix 6.0 Ubuntu 22.04 or 20.04
 
+Install Zabbix server, frontend, and agent
 ```bash
 wget https://repo.zabbix.com/zabbix/6.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_6.0-4+ubuntu$(lsb_release -rs)_all.deb
 sudo dpkg -i zabbix-release_6.0-4+ubuntu$(lsb_release -rs)_all.deb
 sudo apt update -y
 sudo apt -y install zabbix-server-mysql zabbix-frontend-php zabbix-apache-conf zabbix-sql-scripts zabbix-agent
+```
+
+Configure database - In this installation, I will use password rootDBpass as root password and zabbixDBpass as Zabbix password for DB. Consider changing your password for security reasons. Install MariaDB 10.6 - In your terminal, use the following command to install MariaDB 10.6.
+```bash
+sudo apt install software-properties-common -y
+curl -LsS -O https://downloads.mariadb.com/MariaDB/mariadb_repo_setup
+sudo bash mariadb_repo_setup --mariadb-server-version=10.6
+sudo apt update
+sudo apt -y install mariadb-common mariadb-server-10.6 mariadb-client-10.6
+```
+
+Once the installation is complete, start the MariaDB service and enable it to start on boot using the following commands:
+```bash
+sudo systemctl start mariadb
+sudo systemctl enable mariadb
+```
+
+Reset root password for database - Secure MySQL/MariaDB by changing the default password for MySQL root:
+```bash
+sudo mysql_secure_installation
+```
+
+Create database
+```bash
+sudo mysql -uroot -p'rootDBpass' -e "create database zabbix character set utf8mb4 collate utf8mb4_bin;"
+sudo mysql -uroot -p'rootDBpass' -e "create user 'zabbix'@'localhost' identified by 'zabbixDBpass';"
+sudo mysql -uroot -p'rootDBpass' -e "grant all privileges on zabbix.* to zabbix@localhost identified by 'zabbixDBpass';"
+```
+
+Import initial schema and data. - Import database shema for Zabbix server (could last up to 5 minutes):
+```bash
+sudo zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | mysql --default-character-set=utf8mb4 -uzabbix -p'zabbixDBpass' zabbix
+```
+
+Enter database password in Zabbix configuration file - Open zabbix_server.conf file with command:
+```bash
+sudo vi /etc/zabbix/zabbix_server.conf
+```
+
+and add database password in this format anywhere in file:
+```bash
+DBPassword=zabbixDBpass
+```
+
+Configure firewall - If you have a UFW firewall installed on Ubuntu, use these commands to open TCP ports: 10050 (agent), 10051 (server), and 80 (frontend):
+```bash
+sudo ufw allow 10050/tcp
+sudo ufw allow 10051/tcp
+sudo ufw allow 80/tcp
+sudo ufw reload
+```
+
+Start Zabbix server and agent processes
+```bash
+sudo systemctl restart zabbix-server zabbix-agent 
+sudo systemctl enable zabbix-server zabbix-agent
+```
+
+Configure PHP for Zabbix frontend - Edit file /etc/zabbix/apache.conf:
+```bash
+sudo vi /etc/zabbix/apache.conf
+```
+
+Uncomment 2 lines in apache.conf that starts with “# php_value date.timezone Europe/Riga” by removing symbol # and set the right timezone for your country, for example:
+```bash
+php_value date.timezone Europe/Amsterdam
+```
+
+Restart Apache web server and make it start at system boot
+```bash
+sudo systemctl restart apache2
+sudo systemctl enable apache2
+```
+
+Configure web frontend - Connect to your newly installed Zabbix frontend using URL “http://server_ip_or_dns_name/zabbix” to initiate the Zabbix installation wizard. Basically, in this wizard you only need to enter a password for Zabbix DB user and just click “Next step” for everything else. In this guide, I have used a zabbixDBpass as a database password, but if you set something else, be sure to enter the correct password when prompted by the wizard.
+
+Login to frontend using Zabbix default login credentials - Use Zabbix default admin username “Admin” and password “zabbix” (without quotes) to login to Zabbix frontend at URL “http://server_ip_or_dns_name/zabbix” via your browser.
+
+Optimizing Zabbix Server (optional) - Don’t bother with this optimization if you are monitoring a small number of devices, but if you are planning to monitor a large number of devices then continue with this step. Open “zabbix_server.conf” file with command:
+```bash
+sudo vi /etc/zabbix/zabbix_server.conf
+```
+
+Add this configuration anywhere in file:
+```bash
+StartPollers=100
+StartPollersUnreachable=50
+StartPingers=50
+StartTrappers=10
+StartDiscoverers=15
+StartPreprocessors=15
+StartHTTPPollers=5
+StartAlerters=5
+StartTimers=2
+StartEscalators=2
+CacheSize=128M
+HistoryCacheSize=64M
+HistoryIndexCacheSize=32M
+TrendCacheSize=32M
+ValueCacheSize=256M
+```
+
+This is not a perfect configuration, keep in mind that you can optimize it even more. Let’s say if you don’t use ICMP checks then set the “StartPingers” parameter to 1 or if you don’t use active agents then set “StartTrappers” to 1 and so on. You can find out more about the parameters supported in a Zabbix server configuration file in the official documentation.
+
+https://www.zabbix.com/documentation/4.0/manual/appendix/config/zabbix_proxy
+
+If you try to start the Zabbix server you may receive an error “[Z3001] connection to database 'Zabbix' failed: [1040] Too many connections” in the log “/var/log/zabbix/zabbix_server.log” because we are using more Zabbix server processes than MySQL can handle. We need to increase the maximum permitted number of simultaneous client connections and optimize MySQL – so move to the next step.
+
+Optimizing MySQL / MariaDB database (optional) - Create custom MySQL configuration file - Create file “10_my_tweaks.cnf":
+```bash
+sudo vi /etc/mysql/mariadb.conf.d/10_my_tweaks.cnf
+```
+
+And paste this configuration:
+```bash
+[mysqld]
+max_connections                = 404
+innodb_buffer_pool_size        = 800M
+innodb-log-file-size           = 128M
+innodb-log-buffer-size         = 128M
+innodb-file-per-table          = 1
+innodb_buffer_pool_instances   = 8
+innodb_old_blocks_time         = 1000
+innodb_stats_on_metadata       = off
+innodb-flush-method            = O_DIRECT
+innodb-log-files-in-group      = 2
+innodb-flush-log-at-trx-commit = 2
+tmp-table-size                 = 96M
+max-heap-table-size            = 96M
+open_files_limit               = 65535
+max_connect_errors             = 1000000
+connect_timeout                = 60
+wait_timeout                   = 28800
+```
+
+And set the correct file permission:
+```bash
+sudo chown mysql:mysql /etc/mysql/mariadb.conf.d/10_my_tweaks.cnf
+sudo chmod 644 /etc/mysql/mariadb.conf.d/10_my_tweaks.cnf
+```
+
+Configuration parameter max_connections must be larger than the total number of all Zabbix proxy processes plus 150. You can use the command below to automatically check the number of Zabbix processes and add 150 to that number:
+```bash
+sudo egrep "^Start.+=[0-9]" /etc/zabbix/zabbix_server.conf | awk -F "=" '{s+=$2} END {print s+150}'
+```
+
+The second most important parameter is innodb_buffer_pool_size, which determines how much memory can MySQL get for caching InnoDB tables and index data. You should set that parameter to 70% of system memory if only database is installed on server. I didn’t have any problems with memory, but if your Zabbix proxy crashes because of lack of memory, reduce “innodb_buffer_pool_size” and restart MySQL server.
+
+Restart Zabbix Server and MySQL service - Stop and start the services in the same order as below:
+```bash
+sudo systemctl stop zabbix-server
+sudo systemctl stop mysql
+sudo systemctl start mysql
+sudo systemctl start zabbix-server
+```
+
+Upgrade between minor versions:
+```bash
+sudo apt install -y --only-upgrade 'zabbix*'
+sudo systemctl restart zabbix-server
 ```
 
 **********
